@@ -1,13 +1,18 @@
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate conrod;
+
 use nannou;
 use env_logger;
 use nannou::prelude::*;
-use app::Model;
+use model::{model, Model};
 use std::env;
 
+mod model;
 mod station;
-mod app;
+mod mine;
+mod vehicle;
 
 
 fn main() {
@@ -21,27 +26,20 @@ fn main() {
     nannou::app(model, event, view).run();
 }
 
-fn event(_app: &App, mut model: Model, event: Event) -> Model {
+fn event(_app: &App, mut m: Model, event: Event) -> Model {
     if let Event::Update(_update) = event {
-        model.build();
+        m.update();
     }
-    model
+    m
 }
 
-fn model(app: &App) -> Model {
-    app::app(app)
-}
-
-// Draw the state of your `Model` into the given `Frame` here.
 fn view(app: &App, model: &Model, frame: Frame) -> Frame {
-    // Begin drawing
     let draw = app.draw();
     draw.background().rgb(0.02, 0.02, 0.02);
-    // Write the result of our drawing to the window's OpenGL frame.
-    draw.to_frame(app, &frame).unwrap();
-    // Draw the state of the `Ui` to the frame.
-    model.ui.draw_to_frame(app, &frame).unwrap();
 
-    // Return the drawn frame.
+    model.vehicle.draw(&draw);
+
+    draw.to_frame(app, &frame).unwrap();
+    model.ui.draw_to_frame(app, &frame).unwrap();
     frame
 }
