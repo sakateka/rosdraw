@@ -1,5 +1,4 @@
 use nannou::prelude::*;
-use nannou::state::time;
 use nannou::ui::prelude::*;
 use crate::station::Station;
 use crate::mine::Mine;
@@ -19,7 +18,7 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn update(&mut self, since_last: time::Duration) {
+    pub fn update(&mut self, since_last: f64) {
         let ui = &mut self.ui.set_widgets();
 
         // Controls

@@ -6,6 +6,7 @@ extern crate conrod;
 use nannou;
 use env_logger;
 use nannou::prelude::*;
+use nannou::event::SimpleWindowEvent;
 use model::{model, Model};
 use std::env;
 
@@ -13,6 +14,7 @@ mod model;
 mod station;
 mod mine;
 mod vehicle;
+mod tank;
 
 
 fn main() {
@@ -27,8 +29,20 @@ fn main() {
 }
 
 fn event(_app: &App, mut m: Model, event: Event) -> Model {
-    if let Event::Update(update) = event {
-        m.update(update.since_last);
+    match event {
+        Event::Update(update) => {
+            m.update(update.since_last.ms());
+        },
+        Event::WindowEvent { simple: Some(SimpleWindowEvent::Resized(_)), .. } => {
+            m.vehicle.resize();
+        },
+
+        Event::WindowEvent { simple: Some(SimpleWindowEvent::KeyPressed(nannou::VirtualKeyCode::Space)), .. } => {
+            trace!("TODO: freeze");
+            //m.toggle_freeze();
+        },
+
+        _ => (),
     }
     m
 }
