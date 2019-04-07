@@ -27,8 +27,8 @@ fn main() {
 }
 
 fn event(_app: &App, mut m: Model, event: Event) -> Model {
-    if let Event::Update(_update) = event {
-        m.update();
+    if let Event::Update(update) = event {
+        m.update(update.since_last);
     }
     m
 }

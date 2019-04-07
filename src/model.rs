@@ -1,4 +1,5 @@
 use nannou::prelude::*;
+use nannou::state::time;
 use nannou::ui::prelude::*;
 use crate::station::Station;
 use crate::mine::Mine;
@@ -18,7 +19,7 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn update(&mut self) {
+    pub fn update(&mut self, since_last: time::Duration) {
         let ui = &mut self.ui.set_widgets();
 
         // Controls
@@ -42,7 +43,7 @@ impl Model {
             station.update(ui, self.burning);
         }
 
-        self.vehicle.update(ui, self.shipping / 100.0);
+        self.vehicle.update(ui, self.shipping / 100.0, since_last);
     }
 
     fn build_slider(val: f32, max: f32, label: &'static str) -> widget::Slider<'static, f32> {

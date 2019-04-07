@@ -38,7 +38,7 @@ impl Mine {
             .enabled(false)
             .w_h(self.height * 0.3, self.height)
             .label_font_size(20)
-            .rgb(0.3, 0.6, 0.3)
+            .color(color::GREEN)
             .label_rgb(1.0, 1.0, 1.0)
             .border(0.3)
             .bottom_left_with_margin(20.0)
