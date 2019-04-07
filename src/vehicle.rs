@@ -67,8 +67,8 @@ impl Vehicle {
         }
     }
 
-    fn route_to(&self, is_mine: bool, r: ui::Rect) -> Point2 {
-        if is_mine {
+    fn route_to(&self, id: widget::Id, r: ui::Rect) -> Point2 {
+        if id == self.mine {
             pt2(r.x.end as f32 + self.wh.x / 2.0, r.y.start as f32 + self.wh.y / 2.0)
         } else {
             pt2(r.x.end as f32 - self.wh.x / 2.0, r.y.start as f32 - self.wh.y)
@@ -77,9 +77,9 @@ impl Vehicle {
 
     fn update_route(&mut self, ui: &mut UiCell) {
         let r = ui.rect_of(self.from.id).unwrap();
-        self.from.p = self.route_to(self.from.id == self.mine, r);
+        self.from.p = self.route_to(self.from.id, r);
         let r = ui.rect_of(self.to.id).unwrap();
-        self.to.p = self.route_to(self.to.id == self.mine, r);
+        self.to.p = self.route_to(self.to.id, r);
 
         self.distance = self.from.p.distance(self.to.p);
         if self.position.is_some() && self.tank.in_work() {
