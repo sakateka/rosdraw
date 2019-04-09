@@ -1,3 +1,7 @@
+use std::sync::{Mutex, Arc};
+use std::time::Duration;
+use std::thread;
+
 enum TankState {
     Load,
     Unload,
@@ -14,14 +18,35 @@ pub struct Tank {
 
 impl Tank {
     pub fn new() -> Self {
-        Tank {
+        let t = Tank {
             state: TankState::Load,
             fuel: 0.0,
             capacity: 20.0,
             labor: 0.0,
             chunk: 0.10,
-        }
+        };
+        //t.spawn_worker();
+        t
     }
+
+    /*
+    fn spawn_worker(&mut self) {
+        let capacity = self.capacity;
+        thread::spawn(move ||{
+            info!("Employ vehicle worker");
+            loop {
+                thread::sleep(Duration::from_secs(1));
+                if let Ok(mut f) = f.lock() {
+                    let portion = random_f32() * *s.lock().unwrap();
+                    if *f < capacity {
+                        trace!("Miner mine fuel {:.3}", portion);
+                        *f = f32::min(*f + portion as f32, capacity);
+                    }
+                }
+            }
+        });
+    }
+    */
     pub fn load(&mut self) {
         if self.fuel == self.capacity {
             self.stop_transfer();
@@ -69,7 +94,6 @@ impl Tank {
             _ => true,
         }
     }
-
     pub fn percentage(&self) -> f32 {
         (self.fuel / self.capacity * 100.0).round()
     }

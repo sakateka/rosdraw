@@ -78,6 +78,7 @@ impl Vehicle {
     fn update_route(&mut self, ui: &mut UiCell) {
         let r = ui.rect_of(self.from.id).unwrap();
         self.from.p = self.route_to(self.from.id, r);
+
         let r = ui.rect_of(self.to.id).unwrap();
         self.to.p = self.route_to(self.to.id, r);
 

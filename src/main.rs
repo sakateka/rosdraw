@@ -15,6 +15,7 @@ mod station;
 mod mine;
 mod vehicle;
 mod tank;
+mod posixmq;
 
 
 fn main() {
