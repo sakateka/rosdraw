@@ -1,101 +1,193 @@
 use std::sync::{Mutex, Arc};
-use std::time::Duration;
+use std::collections::HashMap;
 use std::thread;
+use crate::posixmq::{PMQ, Msg, VEHICLE_QUEUE, MINE_QUEUE, STATION_QUEUE_PREFIX};
 
-enum TankState {
-    Load,
-    Unload,
-    Nop,
+
+const DEFAULT_SCORE: i32 = 100;
+
+#[derive(Copy, Clone, Debug)]
+pub enum TankState {
+    Refill(f32),
+    Supply(f32),
+    Load(f32),
+    Unload(f32),
 }
 
 pub struct Tank {
-    state: TankState,
-    fuel: f32,
+    supply_target: Arc<Mutex<Option<usize>>>,
     capacity: f32,
-    labor: f64,
-    chunk: f32,
+    state: Arc<Mutex<TankState>>,
+    q: PMQ,
 }
 
 impl Tank {
     pub fn new() -> Self {
         let t = Tank {
-            state: TankState::Load,
-            fuel: 0.0,
+            supply_target: Arc::new(Mutex::new(None)),
             capacity: 20.0,
-            labor: 0.0,
-            chunk: 0.10,
+            state: Arc::new(Mutex::new(TankState::Refill(0.0))),
+            q: PMQ::open(VEHICLE_QUEUE),
         };
-        //t.spawn_worker();
+        t.spawn_worker();
+        t.load();
         t
     }
 
-    /*
-    fn spawn_worker(&mut self) {
+    fn spawn_worker(&self) {
         let capacity = self.capacity;
+        let fourth = capacity * 0.25;
+        let state = self.state.clone();
+        let target = self.supply_target.clone();
+
         thread::spawn(move ||{
             info!("Employ vehicle worker");
+            let mq_v = PMQ::open(VEHICLE_QUEUE);
+            let mq_m = PMQ::open(MINE_QUEUE);
+
+            let mut mq_s: HashMap<usize, PMQ> = HashMap::new();
+            let mut idle_stations: HashMap<usize, i32> = HashMap::new();
+
+            let mut fuel = 0.0;
+
             loop {
-                thread::sleep(Duration::from_secs(1));
-                if let Ok(mut f) = f.lock() {
-                    let portion = random_f32() * *s.lock().unwrap();
-                    if *f < capacity {
-                        trace!("Miner mine fuel {:.3}", portion);
-                        *f = f32::min(*f + portion as f32, capacity);
-                    }
+                let msg = mq_v.receive();
+                trace!("Tank receive msg: {:?}", msg);
+                match msg {
+                    Ok(Msg::Fuel(amount)) => {
+                        fuel += amount;
+                        let mut state = state.lock().unwrap();
+                        *state = match *state {
+                            TankState::Load(_) => TankState::Load(fuel / capacity * 100.0),
+                            TankState::Unload(_) => {
+                                let t = target.lock().unwrap();
+                                info!("Remain fuel {} from station {:?}", amount, *t);
+                                // send unload
+                                match *t {
+                                    Some(idx) => {
+                                        let s = idle_stations.remove(&idx);
+                                        info!("Remove station {:?} from idle stations", s);
+                                        // trigger TankMove
+                                        mq_s[&idx].send(Msg::Fuel(0.0))
+                                            .expect(format!("Send fuel to station {}", idx).as_ref());
+                                    },
+                                    _ => unreachable!("Try unload to unknown station!"),
+                                };
+                                TankState::Unload(fuel / capacity * 100.0)
+                            },
+                            _ => {
+                                error!("Receive fuel from unexpected state: {:?}", *state);
+                                *state
+                            },
+                        }
+                    },
+                    Ok(Msg::TankLoad) => {
+                        mq_m.send(Msg::Fuel(capacity - fuel)).expect("Send fuel request");
+                        *state.lock().unwrap() = TankState::Load(fuel / capacity * 100.0);
+                    },
+                    Ok(Msg::TankUnload) => {
+                        let sub = f32::min(fuel, fourth);
+                        fuel = f32::max(fuel - sub, 0.0);
+                        *state.lock().unwrap() = TankState::Unload(fuel / capacity * 100.0);
+                        match *target.lock().unwrap() {
+                            Some(idx) => {
+                                if let Some(level) = idle_stations.get_mut(&idx) {
+                                    *level -= 1;
+                                }
+                                mq_s[&idx].send(Msg::Fuel(sub))
+                                    .expect(format!("Send fuel to station {}", idx).as_ref());
+                            },
+                            _ => unreachable!("Try unload to unknown station!"),
+                        }
+                    },
+                    Ok(Msg::TankMove) => {
+                        let mut s = state.lock().unwrap();
+                        let mut t = target.lock().unwrap();
+                        match *s {
+                            TankState::Load(_) => {
+                                if fuel < fourth {
+                                    debug!("not enough fuel received: val={}, need={}", fuel, fourth);
+                                    mq_m.send(Msg::Fuel(capacity - fuel)).expect("Send fuel request");
+                                } else {
+                                    *t = match *t {
+                                        Some(idx) => {
+                                            Some(idx)
+                                        },
+                                        None => {
+                                            let next = idle_stations.iter().max_by(|a, b| {
+                                                (*a.1 as u32).cmp(&(*b.1 as u32))
+                                            });
+                                            if let Some(idx) = next {
+                                                Some(*idx.0)
+                                            } else {
+                                                None
+                                            }
+                                        },
+                                    };
+                                    if t.is_some() {
+                                        *s = TankState::Supply(fuel / capacity * 100.0);
+                                    }
+                                    info!("Supply to station {:?}", *t);
+                                }
+                            },
+                            TankState::Unload(_) | TankState::Refill(_) | TankState::Supply(_) => {
+                                let next = idle_stations.iter().max_by(|a, b| {
+                                    (*a.1 as u32).cmp(&(*b.1 as u32))
+                                });
+                                if let Some(idx) = next {
+                                    *t = Some(*idx.0);
+                                    if fuel == 0.0 {
+                                        *s = TankState::Refill(fuel / capacity * 100.0);
+                                    } else {
+                                        *s = TankState::Supply(fuel / capacity * 100.0);
+                                    }
+                                } else {
+                                    *t = None;
+                                    *s = TankState::Refill(fuel / capacity * 100.0);
+                                }
+                                trace!("Set next target to {:?} from {:?}, state={:?}", next, idle_stations, *s);
+                            },
+                        }
+                    },
+                    Ok(Msg::IdleStation(idx)) => {
+                        if !mq_s.contains_key(&idx) {
+                            let q_name = format!("{}{}", STATION_QUEUE_PREFIX, idx);
+                            mq_s.insert(idx, PMQ::open(q_name.as_ref()));
+                        }
+                        if *target.lock().unwrap() == None {
+                            *target.lock().unwrap() = Some(idx);
+                            // trigger TankMove
+                            mq_m.send(Msg::Fuel(0.0)).expect("Send fuel request");
+                        }
+                        idle_stations.insert(idx, DEFAULT_SCORE);
+                    },
+                    Err(e) => {
+                        error!("Vehicle queue receive error: {:?}", e);
+                        break
+                    },
                 }
             }
         });
     }
-    */
-    pub fn load(&mut self) {
-        if self.fuel == self.capacity {
-            self.stop_transfer();
-            return;
-        }
-        self.state = TankState::Load;
-        if self.labor > self.percentage() as f64 * 10.0 /*ms*/ {
-            self.fuel = f32::min(self.capacity, self.fuel + self.capacity * self.chunk);
-            trace!("Load fuel: {:.0}%", self.percentage());
-        }
+
+    pub fn get_target(&self) -> Option<usize> {
+        *self.supply_target.lock().unwrap()
     }
 
-    pub fn unload(&mut self) {
-        if self.fuel == 0.0 {
-            self.stop_transfer();
-            return;
-        }
-        self.state = TankState::Unload;
-        if self.labor > (100.0 - self.percentage()) as f64 * 10.0 /*ms*/ {
-            self.fuel = (self.fuel -  self.capacity * self.chunk).round();
-            trace!("Unload fuel: {:.0}%", self.percentage());
-        }
+    pub fn get_state(&self) -> TankState {
+        *self.state.lock().unwrap()
     }
 
-    pub fn transfer_fuel(&mut self, labor: f64) {
-        if self.in_work() {
-            self.labor += labor;
-            match self.state {
-                TankState::Load => self.load(),
-                TankState::Unload => self.unload(),
-                _ => (),
-            };
-        }
+    pub fn load(&self) {
+        let msg = Msg::TankLoad;
+        trace!("Send message: {:?}", msg);
+        self.q.send(msg).expect("Send tank load message");
     }
 
-    pub fn stop_transfer(&mut self) {
-        self.state = TankState::Nop;
-        self.labor = 0.0;
-    }
-
-
-    pub fn in_work(&self) -> bool {
-        match self.state {
-            TankState::Nop => false,
-            _ => true,
-        }
-    }
-    pub fn percentage(&self) -> f32 {
-        (self.fuel / self.capacity * 100.0).round()
+    pub fn unload(&self) {
+        let msg = Msg::TankUnload;
+        trace!("Send message: {:?}", msg);
+        self.q.send(msg).expect("Send tank unload message");
     }
 }
 

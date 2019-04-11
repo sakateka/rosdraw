@@ -20,100 +20,110 @@ impl RoutePoint {
 }
 
 pub struct Vehicle {
-    mine: widget::Id,
     pub wh: Point2,
-    from: RoutePoint, 
-    to:  RoutePoint,
+    mine: RoutePoint,
+    station:  RoutePoint,
+    ids: Ids,
     tank: Tank,
     position: Option<Point2>,
-    distance: f32,
-    need_resize: bool,
+    pub need_resize: bool,
 }
 
 impl Vehicle {
     pub fn new(ids: Ids) -> Self {
         Vehicle {
-            mine: ids.mine,
             wh: pt2(50.0, 20.0),
-            from: RoutePoint::new(ids.mine),
-            to: RoutePoint::new(ids.stations[0]),
+            mine: RoutePoint::new(ids.mine),
+            station: RoutePoint::new(ids.stations[0]),
+            ids: ids,
             tank: Tank::new(),
             position: None,
-            distance: 0.0,
             need_resize: true,
         }
     }
 
-    fn background(&self) -> Rgba {
-        if (self.to.id == self.mine) && !(self.tank.in_work()) {
-            WHITE
-        } else {
-            GREEN
-        }
-    }
-
     pub fn draw(&self, draw: &Draw) {
-        draw.rect()
-            .wh(self.wh)
-            .color(self.background())
-            .xy(self.position.unwrap());
-        if self.tank.in_work() {
-            let transfer_wh = pt2(self.wh.x, self.wh.y * (1.0 - self.tank.percentage()/100.0));
-            let pos = self.position.unwrap();
+        if let Some(pos) = self.position {
             draw.rect()
-                .wh(transfer_wh)
-                .color(WHITE)
-                .x_y(pos.x, pos.y + (self.wh.y/2.0 - transfer_wh.y/2.0));
+                .wh(self.wh)
+                .color(GREEN)
+                .xy(pos);
+                let transfer_wh = pt2(self.wh.x, self.wh.y * (1.0 - self.fuel_percent() / 100.0));
+                draw.rect()
+                    .wh(transfer_wh)
+                    .color(WHITE)
+                    .x_y(pos.x, pos.y + (self.wh.y/2.0 - transfer_wh.y/2.0));
+
         }
     }
 
-    fn route_to(&self, id: widget::Id, r: ui::Rect) -> Point2 {
-        if id == self.mine {
-            pt2(r.x.end as f32 + self.wh.x / 2.0, r.y.start as f32 + self.wh.y / 2.0)
-        } else {
-            pt2(r.x.end as f32 - self.wh.x / 2.0, r.y.start as f32 - self.wh.y)
+    pub fn update_route(&mut self, ui: &mut UiCell, state: TankState) {
+        if let Some(r) = ui.rect_of(self.ids.mine) {
+            self.mine.p = pt2(r.x.end as f32 + self.wh.x / 2.0,
+                              r.y.start as f32 + self.wh.y / 2.0)
         }
-    }
 
-    fn update_route(&mut self, ui: &mut UiCell) {
-        let r = ui.rect_of(self.from.id).unwrap();
-        self.from.p = self.route_to(self.from.id, r);
+        if let Some(r) = ui.rect_of(self.station.id) {
+            self.station.p = pt2(r.x.end as f32 - self.wh.x / 2.0,
+                                 r.y.start as f32 - self.wh.y)
+        }
 
-        let r = ui.rect_of(self.to.id).unwrap();
-        self.to.p = self.route_to(self.to.id, r);
-
-        self.distance = self.from.p.distance(self.to.p);
-        if self.position.is_some() && self.tank.in_work() {
-            self.position = Some(self.from.p);
+        match state {
+            TankState::Load(_) => {
+                self.position = Some(self.mine.p);
+            },
+            TankState::Unload(_) => {
+                self.position = Some(self.station.p);
+            }
+            _ => (),
         }
         self.need_resize = false;
     }
 
-    pub fn update(&mut self, ui: &mut UiCell, speed: f32, since_last: f64) {
-        if self.need_resize {
-            self.update_route(ui);
+    pub fn update(&mut self, ui: &mut UiCell, speed: f32) {
+        if let Some(id) = self.current_station() {
+            self.station.id = id;
         }
+        let state = self.tank.get_state();
+        self.update_route(ui, state);
 
         if let Some(p) = self.position {
-            if self.tank.in_work() {
-                self.tank.transfer_fuel(since_last);
-                return;
-            }
-            let speedup = speed * (self.distance / p.distance(self.to.p)) / 3.0;
-            let mut new_p = p.lerp(self.to.p, speed + speedup);
-            if p.distance(new_p) > p.distance(self.to.p) {
-                trace!("Swap target for vehicle");
-                new_p = self.to.p; // complete move
-                std::mem::swap(&mut self.from, &mut self.to);
-                if self.to.id == self.mine {
-                    self.tank.unload()
-                } else {
-                    self.tank.load();
-                }
+            let (from, to) = match state {
+                TankState::Load(_) | TankState::Unload(_) => return,
+                TankState::Supply(_) => (&self.mine, &self.station),
+                TankState::Refill(_) => (&self.station, &self.mine),
+            };
+            let dist = from.p.distance(to.p);
+
+            let speedup = speed * (dist / p.distance(to.p)) / 3.0;
+            let mut new_p = p.lerp(to.p, speed + speedup);
+            if p.distance(new_p) >= p.distance(to.p) {
+                new_p = to.p; // complete move
+                match state {
+                    TankState::Refill(_) => self.tank.load(),
+                    TankState::Supply(_) => self.tank.unload(),
+                    _ => (),
+                };
             }
             self.position = Some(new_p);
         } else  {
-            self.position = Some(self.from.p);
+            self.position = Some(self.mine.p);
+        }
+    }
+
+    fn fuel_percent(&self) -> f32 {
+        match self.tank.get_state() {
+            TankState::Load(l) |
+                TankState::Unload(l) |
+                TankState::Supply(l) |
+                TankState::Refill(l) => l,
+        }
+    }
+
+    fn current_station(&self) -> Option<widget::Id> {
+        match self.tank.get_target() {
+            Some(idx) => Some(self.ids.stations[idx]),
+            None => None,
         }
     }
 

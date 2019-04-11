@@ -2,6 +2,7 @@ use std::sync::{Mutex, Arc};
 use std::thread;
 use std::time::Duration;
 use nannou::ui::prelude::*;
+use crate::posixmq::{PMQ, Msg, VEHICLE_QUEUE, STATION_QUEUE_PREFIX};
 
 pub struct Station {
     id: widget::Id,
@@ -17,10 +18,9 @@ pub struct Station {
 
 impl Station {
     pub fn new(idx: usize, id: widget::Id, id_burning: widget::Id) -> Self {
-        let fuel = Arc::new(Mutex::new(100.)); 
-        let speed_update = 1.0;
+        let fuel = Arc::new(Mutex::new(10.));
+        let speed_update = 0.3;
         let speed = Arc::new(Mutex::new(speed_update));
-        Self::launch(idx, fuel.clone(), speed.clone());
         Station{
             id,
             id_burning,
@@ -31,7 +31,7 @@ impl Station {
             label: "0".to_string(),
             capacity: 100.0,
             height: 100.0,
-        }
+        }.launch()
     }
 
     pub fn update(&mut self, ui: &mut UiCell) {
@@ -56,7 +56,7 @@ impl Station {
     }
 
     pub fn build_control(&mut self, ui: &mut UiCell, speed: f32) -> f32 {
-        let mut w = widget::Slider::new(speed, 0.0, 10.0)
+        let mut w = widget::Slider::new(speed, 0.0, 1.0)
             .w_h(10.0, 50.0)
             .rgb(1.0, 1.0, 0.3)
             .border(0.0);
@@ -65,24 +65,68 @@ impl Station {
         } else {
             w = w.left(20.0);
         }
-        w.set(self.id_burning, ui).unwrap_or(self.speed_update)
+        w.set(self.id_burning, ui).unwrap_or(speed)
     }
 
-    fn launch(id: usize, f: Arc<Mutex<f32>>, s: Arc<Mutex<f32>>) {
+    fn launch(self) -> Self {
+        let idx = self.idx;
+        let f = self.fuel.clone();
+        let s = self.speed.clone();
+        let capacity = self.capacity;
+        let mq_v = PMQ::open(VEHICLE_QUEUE);
+        let q_name = format!("{}{}", STATION_QUEUE_PREFIX, idx);
+        let q = PMQ::open(q_name.as_ref()).nonblocking();
+        let delay = Duration::from_millis(250);
+
         thread::spawn(move ||{
-            info!("Build station #{}", id);
+            info!("Build station #{}", idx);
             loop {
-                thread::sleep(Duration::from_secs(1));
-                if let Ok(mut f) = f.lock() {
-                    if let Ok(s) = s.lock() {
-                        if *f > 0. {
-                            trace!("Station #{} burned {:.3} fuel", id, *s);
-                            *f = f32::max(0., *f - *s);
+                let msg = q.receive();
+                if let Ok(ref msg) = msg {
+                    trace!("Station #{} receive msg: {:?}, current {}", idx, msg, *f.lock().unwrap());
+                }
+                match msg {
+                    Ok(Msg::Fuel(amount)) => {
+                        if amount > 0.0 {
+                            thread::sleep(delay / 2);
+                            let mut f = f.lock().unwrap();
+                            let update = *f + amount;
+                            let remain = f32::max(update - capacity, 0.0);
+                            *f = update - remain;
+                            if remain > 0.0 {
+                                info!("Set queue non blocking mode remain={}", remain);
+                                q.set_nonblocking(true);
+                                mq_v.send(Msg::Fuel(remain)).expect("Send remain tank fuel");
+                            } else {
+                                mq_v.send(Msg::TankUnload).expect("Send tank unload");
+                            }
+                        } else {
+                            mq_v.send(Msg::TankMove).expect("Send TankMove from station");
+                            info!("Set queue non blocking mode");
+                            q.set_nonblocking(true);
                         }
+                    },
+                    Ok(_) => unreachable!(),
+                    Err(_) => {
+                        if let Ok(mut f) = f.lock() {
+                            if let Ok(s) = s.lock() {
+                                if *f > 0.0 {
+                                    if  *s > 0.0 {
+                                        trace!("Station #{} burned {:.3} fuel", idx, *s);
+                                        *f = f32::max(0., *f - *s);
+                                    }
+                                } else {
+                                    mq_v.send(Msg::IdleStation(idx)).expect("Send idle station");
+                                    info!("Set queue blocking mode");
+                                    q.set_nonblocking(false);
+                                }
+                            }
+                        }
+                        thread::sleep(delay);
                     }
                 }
             }
         });
+        self
     }
-        
 }

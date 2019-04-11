@@ -26,21 +26,22 @@ fn main() {
     );
     env_logger::init();
 
+    posixmq::cleanup_posix_queues();
+
     nannou::app(model, event, view).run();
 }
 
 fn event(_app: &App, mut m: Model, event: Event) -> Model {
     match event {
-        Event::Update(update) => {
-            m.update(update.since_last.ms());
+        Event::Update(_update) => {
+            m.update();
         },
         Event::WindowEvent { simple: Some(SimpleWindowEvent::Resized(_)), .. } => {
             m.vehicle.resize();
         },
 
         Event::WindowEvent { simple: Some(SimpleWindowEvent::KeyPressed(nannou::VirtualKeyCode::Space)), .. } => {
-            trace!("TODO: freeze");
-            //m.toggle_freeze();
+            m.toggle_freeze();
         },
 
         _ => (),
