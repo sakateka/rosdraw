@@ -76,7 +76,7 @@ impl Station {
         let mq_v = PMQ::open(VEHICLE_QUEUE);
         let q_name = format!("{}{}", STATION_QUEUE_PREFIX, idx);
         let q = PMQ::open(q_name.as_ref()).nonblocking();
-        let delay = Duration::from_millis(250);
+        let delay = Duration::from_millis(100);
 
         thread::spawn(move ||{
             info!("Build station #{}", idx);
@@ -88,6 +88,9 @@ impl Station {
                 match msg {
                     Ok(Msg::Fuel(amount)) => {
                         if amount > 0.0 {
+                            // full station in blocking mode
+                            q.set_nonblocking(false);
+
                             thread::sleep(delay / 2);
                             let mut f = f.lock().unwrap();
                             let update = *f + amount;
@@ -95,7 +98,6 @@ impl Station {
                             *f = update - remain;
                             if remain > 0.0 {
                                 info!("Set queue non blocking mode remain={}", remain);
-                                q.set_nonblocking(true);
                                 mq_v.send(Msg::Fuel(remain)).expect("Send remain tank fuel");
                             } else {
                                 mq_v.send(Msg::TankUnload).expect("Send tank unload");

@@ -57,7 +57,7 @@ impl Mine {
     fn launch(capacity: f32, fuel: Arc<Mutex<f32>>, speed: Arc<Mutex<f32>>) {
         thread::spawn(move ||{
             info!("Build Mine");
-            let delay = Duration::from_millis(250);
+            let delay = Duration::from_millis(100);
 
             let mq_m = PMQ::open(MINE_QUEUE).nonblocking();
             let mq_v = PMQ::open(VEHICLE_QUEUE);
@@ -68,11 +68,10 @@ impl Mine {
                 }
                 match msg {
                     Ok(Msg::Fuel(mut amount)) => {
-                        thread::sleep(delay / 2);
                         let fourth = amount * 0.25;
                         amount = f32::min(amount, *fuel.lock().unwrap());
                         loop {
-                            thread::sleep(delay);
+                            thread::sleep(delay / 2);
                             if amount <= 0.0 {
                                 mq_v.send(Msg::TankMove).expect("Send move to vehicle");
                                 break;
