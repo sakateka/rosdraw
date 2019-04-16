@@ -1,8 +1,8 @@
+use crate::model::Ids;
+use crate::tank::*;
 use nannou::prelude::*;
 use nannou::ui::prelude::*;
 use nannou::Draw;
-use crate::model::Ids;
-use crate::tank::*;
 
 #[derive(PartialEq)]
 pub struct RoutePoint {
@@ -12,7 +12,7 @@ pub struct RoutePoint {
 
 impl RoutePoint {
     fn new(id: widget::Id) -> Self {
-        RoutePoint{
+        RoutePoint {
             id,
             p: pt2(0.0, 0.0),
         }
@@ -22,7 +22,7 @@ impl RoutePoint {
 pub struct Vehicle {
     pub wh: Point2,
     mine: RoutePoint,
-    station:  RoutePoint,
+    station: RoutePoint,
     ids: Ids,
     tank: Tank,
     position: Option<Point2>,
@@ -44,34 +44,34 @@ impl Vehicle {
 
     pub fn draw(&self, draw: &Draw) {
         if let Some(pos) = self.position {
+            draw.rect().wh(self.wh).color(GREEN).xy(pos);
+            let transfer_wh = pt2(self.wh.x, self.wh.y * (1.0 - self.fuel_percent() / 100.0));
             draw.rect()
-                .wh(self.wh)
-                .color(GREEN)
-                .xy(pos);
-                let transfer_wh = pt2(self.wh.x, self.wh.y * (1.0 - self.fuel_percent() / 100.0));
-                draw.rect()
-                    .wh(transfer_wh)
-                    .color(WHITE)
-                    .x_y(pos.x, pos.y + (self.wh.y/2.0 - transfer_wh.y/2.0));
-
+                .wh(transfer_wh)
+                .color(WHITE)
+                .x_y(pos.x, pos.y + (self.wh.y / 2.0 - transfer_wh.y / 2.0));
         }
     }
 
     pub fn update_route(&mut self, ui: &mut UiCell, state: TankState) {
         if let Some(r) = ui.rect_of(self.ids.mine) {
-            self.mine.p = pt2(r.x.end as f32 + self.wh.x / 2.0,
-                              r.y.start as f32 + self.wh.y / 2.0)
+            self.mine.p = pt2(
+                r.x.end as f32 + self.wh.x / 2.0,
+                r.y.start as f32 + self.wh.y / 2.0,
+            )
         }
 
         if let Some(r) = ui.rect_of(self.station.id) {
-            self.station.p = pt2(r.x.end as f32 - self.wh.x / 2.0,
-                                 r.y.start as f32 - self.wh.y)
+            self.station.p = pt2(
+                r.x.end as f32 - self.wh.x / 2.0,
+                r.y.start as f32 - self.wh.y,
+            )
         }
 
         match state {
             TankState::Load(_) => {
                 self.position = Some(self.mine.p);
-            },
+            }
             TankState::Unload(_) => {
                 self.position = Some(self.station.p);
             }
@@ -106,17 +106,17 @@ impl Vehicle {
                 };
             }
             self.position = Some(new_p);
-        } else  {
+        } else {
             self.position = Some(self.mine.p);
         }
     }
 
     fn fuel_percent(&self) -> f32 {
         match self.tank.get_state() {
-            TankState::Load(l) |
-                TankState::Unload(l) |
-                TankState::Supply(l) |
-                TankState::Refill(l) => l,
+            TankState::Load(l)
+            | TankState::Unload(l)
+            | TankState::Supply(l)
+            | TankState::Refill(l) => l,
         }
     }
 

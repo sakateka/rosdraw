@@ -1,7 +1,7 @@
-use posixmq::{PosixMq, OpenOptions, unlink};
-use std::str::FromStr;
-use std::io;
 use crate::model::NUM_STATIONS;
+use posixmq::{unlink, OpenOptions, PosixMq};
+use std::io;
+use std::str::FromStr;
 
 pub const MINE_QUEUE: &str = "/mq-m";
 pub const VEHICLE_QUEUE: &str = "/mq-v";

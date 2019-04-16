@@ -1,15 +1,15 @@
-use std::sync::{Mutex, Arc};
+use crate::posixmq::{Msg, PMQ, STATION_QUEUE_PREFIX, VEHICLE_QUEUE};
+use nannou::ui::prelude::*;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use nannou::ui::prelude::*;
-use crate::posixmq::{PMQ, Msg, VEHICLE_QUEUE, STATION_QUEUE_PREFIX};
 
 pub struct Station {
     id: widget::Id,
     id_burning: widget::Id,
     idx: usize,
     fuel: Arc<Mutex<f32>>,
-    speed:  Arc<Mutex<f32>>,
+    speed: Arc<Mutex<f32>>,
     speed_update: f32,
     label: String,
     capacity: f32,
@@ -21,7 +21,7 @@ impl Station {
         let fuel = Arc::new(Mutex::new(10.));
         let speed_update = 0.3;
         let speed = Arc::new(Mutex::new(speed_update));
-        Station{
+        Station {
             id,
             id_burning,
             idx,
@@ -31,7 +31,8 @@ impl Station {
             label: "0".to_string(),
             capacity: 100.0,
             height: 100.0,
-        }.launch()
+        }
+        .launch()
     }
 
     pub fn update(&mut self, ui: &mut UiCell) {
@@ -78,12 +79,17 @@ impl Station {
         let q = PMQ::open(q_name.as_ref()).nonblocking();
         let delay = Duration::from_millis(100);
 
-        thread::spawn(move ||{
+        thread::spawn(move || {
             info!("Build station #{}", idx);
             loop {
                 let msg = q.receive();
                 if let Ok(ref msg) = msg {
-                    trace!("Station #{} receive msg: {:?}, current {}", idx, msg, *f.lock().unwrap());
+                    trace!(
+                        "Station #{} receive msg: {:?}, current {}",
+                        idx,
+                        msg,
+                        *f.lock().unwrap()
+                    );
                 }
                 match msg {
                     Ok(Msg::Fuel(amount)) => {
@@ -103,17 +109,18 @@ impl Station {
                                 mq_v.send(Msg::TankUnload).expect("Send tank unload");
                             }
                         } else {
-                            mq_v.send(Msg::TankMove).expect("Send TankMove from station");
+                            mq_v.send(Msg::TankMove)
+                                .expect("Send TankMove from station");
                             info!("Set queue non blocking mode");
                             q.set_nonblocking(true);
                         }
-                    },
+                    }
                     Ok(_) => unreachable!(),
                     Err(_) => {
                         if let Ok(mut f) = f.lock() {
                             if let Ok(s) = s.lock() {
                                 if *f > 0.0 {
-                                    if  *s > 0.0 {
+                                    if *s > 0.0 {
                                         trace!("Station #{} burned {:.3} fuel", idx, *s);
                                         *f = f32::max(0., *f - *s);
                                     }

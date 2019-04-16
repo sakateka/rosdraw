@@ -1,8 +1,8 @@
+use crate::mine::Mine;
+use crate::station::Station;
+use crate::vehicle::Vehicle;
 use nannou::prelude::*;
 use nannou::ui::prelude::*;
-use crate::station::Station;
-use crate::mine::Mine;
-use crate::vehicle::Vehicle;
 
 pub const NUM_STATIONS: usize = 4;
 
@@ -25,7 +25,6 @@ impl Model {
         } else {
             trace!("TODO: Unfreeze!");
         }
-
     }
     pub fn update(&mut self) {
         let ui = &mut self.ui.set_widgets();
@@ -33,10 +32,12 @@ impl Model {
         // Controls
         self.mining = Self::build_slider(self.mining, 7., "Mining")
             .top_left_with_margin(20.0)
-            .set(self.ids.mining, ui).unwrap_or(self.mining);
+            .set(self.ids.mining, ui)
+            .unwrap_or(self.mining);
         self.shipping = Self::build_slider(self.shipping, 7., "Shipping")
             .down(10.0)
-            .set(self.ids.shipping, ui).unwrap_or(self.shipping);
+            .set(self.ids.shipping, ui)
+            .unwrap_or(self.shipping);
 
         // Mine
         self.mine.update_ui(ui, self.mining);
@@ -60,7 +61,7 @@ impl Model {
     }
 }
 
-widget_ids!{
+widget_ids! {
     #[derive(Clone)]
     pub struct Ids {
         mining,
@@ -74,23 +75,21 @@ widget_ids!{
 
 pub fn model(app: &App) -> Model {
     app.new_window()
-       .with_title("Power station")
-       .with_dimensions(600, 400)
-       .build()
-       .unwrap();
-
+        .with_title("Power station")
+        .with_dimensions(600, 400)
+        .build()
+        .unwrap();
 
     app.set_loop_mode(LoopMode::rate_fps(60.0));
 
     // Create the UI.
-    let mut ui = app.new_ui()
-        .build()
-        .unwrap();
-
+    let mut ui = app.new_ui().build().unwrap();
 
     let mut ids = Ids::new(ui.widget_id_generator());
-    ids.stations.resize(NUM_STATIONS, &mut ui.widget_id_generator());
-    ids.burning.resize(NUM_STATIONS, &mut ui.widget_id_generator());
+    ids.stations
+        .resize(NUM_STATIONS, &mut ui.widget_id_generator());
+    ids.burning
+        .resize(NUM_STATIONS, &mut ui.widget_id_generator());
 
     let stations = [
         // stations are drawn in reverse order, recover order here

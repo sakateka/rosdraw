@@ -3,20 +3,19 @@ extern crate log;
 #[macro_use]
 extern crate conrod;
 
-use nannou;
 use env_logger;
-use nannou::prelude::*;
-use nannou::event::SimpleWindowEvent;
 use model::{model, Model};
+use nannou;
+use nannou::event::SimpleWindowEvent;
+use nannou::prelude::*;
 use std::env;
 
-mod model;
-mod station;
 mod mine;
-mod vehicle;
-mod tank;
+mod model;
 mod posixmq;
-
+mod station;
+mod tank;
+mod vehicle;
 
 fn main() {
     env::set_var("RUST_BACKTRACE", "1");
@@ -35,14 +34,20 @@ fn event(_app: &App, mut m: Model, event: Event) -> Model {
     match event {
         Event::Update(_update) => {
             m.update();
-        },
-        Event::WindowEvent { simple: Some(SimpleWindowEvent::Resized(_)), .. } => {
+        }
+        Event::WindowEvent {
+            simple: Some(SimpleWindowEvent::Resized(_)),
+            ..
+        } => {
             m.vehicle.resize();
-        },
+        }
 
-        Event::WindowEvent { simple: Some(SimpleWindowEvent::KeyPressed(nannou::VirtualKeyCode::Space)), .. } => {
+        Event::WindowEvent {
+            simple: Some(SimpleWindowEvent::KeyPressed(nannou::VirtualKeyCode::Space)),
+            ..
+        } => {
             m.toggle_freeze();
-        },
+        }
 
         _ => (),
     }

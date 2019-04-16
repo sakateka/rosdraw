@@ -1,8 +1,7 @@
-use std::sync::{Mutex, Arc};
+use crate::posixmq::{Msg, MINE_QUEUE, PMQ, STATION_QUEUE_PREFIX, VEHICLE_QUEUE};
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::thread;
-use crate::posixmq::{PMQ, Msg, VEHICLE_QUEUE, MINE_QUEUE, STATION_QUEUE_PREFIX};
-
 
 const DEFAULT_SCORE: i32 = 100;
 
@@ -40,7 +39,7 @@ impl Tank {
         let state = self.state.clone();
         let target = self.supply_target.clone();
 
-        thread::spawn(move ||{
+        thread::spawn(move || {
             info!("Employ vehicle worker");
             let mq_v = PMQ::open(VEHICLE_QUEUE);
             let mq_m = PMQ::open(MINE_QUEUE);
@@ -68,23 +67,25 @@ impl Tank {
                                         let s = idle_stations.remove(&idx);
                                         info!("Remove station {:?} from idle stations", s);
                                         // trigger TankMove
-                                        mq_s[&idx].send(Msg::Fuel(0.0))
-                                            .expect(format!("Send fuel to station {}", idx).as_ref());
-                                    },
+                                        mq_s[&idx].send(Msg::Fuel(0.0)).expect(
+                                            format!("Send fuel to station {}", idx).as_ref(),
+                                        );
+                                    }
                                     _ => unreachable!("Try unload to unknown station!"),
                                 };
                                 TankState::Unload(fuel / capacity * 100.0)
-                            },
+                            }
                             _ => {
                                 error!("Receive fuel from unexpected state: {:?}", *state);
                                 *state
-                            },
+                            }
                         }
-                    },
+                    }
                     Ok(Msg::TankLoad) => {
-                        mq_m.send(Msg::Fuel(capacity - fuel)).expect("Send fuel request");
+                        mq_m.send(Msg::Fuel(capacity - fuel))
+                            .expect("Send fuel request");
                         *state.lock().unwrap() = TankState::Load(fuel / capacity * 100.0);
-                    },
+                    }
                     Ok(Msg::TankUnload) => {
                         let sub = f32::min(fuel, fourth);
                         fuel = f32::max(fuel - sub, 0.0);
@@ -94,46 +95,49 @@ impl Tank {
                                 if let Some(level) = idle_stations.get_mut(&idx) {
                                     *level -= 1;
                                 }
-                                mq_s[&idx].send(Msg::Fuel(sub))
+                                mq_s[&idx]
+                                    .send(Msg::Fuel(sub))
                                     .expect(format!("Send fuel to station {}", idx).as_ref());
-                            },
+                            }
                             _ => unreachable!("Try unload to unknown station!"),
                         }
-                    },
+                    }
                     Ok(Msg::TankMove) => {
                         let mut s = state.lock().unwrap();
                         let mut t = target.lock().unwrap();
                         match *s {
                             TankState::Load(_) => {
                                 if fuel < fourth {
-                                    debug!("not enough fuel received: val={}, need={}", fuel, fourth);
-                                    mq_m.send(Msg::Fuel(capacity - fuel)).expect("Send fuel request");
+                                    debug!(
+                                        "not enough fuel received: val={}, need={}",
+                                        fuel, fourth
+                                    );
+                                    mq_m.send(Msg::Fuel(capacity - fuel))
+                                        .expect("Send fuel request");
                                 } else {
                                     *t = match *t {
-                                        Some(idx) => {
-                                            Some(idx)
-                                        },
+                                        Some(idx) => Some(idx),
                                         None => {
-                                            let next = idle_stations.iter().max_by(|a, b| {
-                                                (*a.1 as u32).cmp(&(*b.1 as u32))
-                                            });
+                                            let next = idle_stations
+                                                .iter()
+                                                .max_by(|a, b| (*a.1 as u32).cmp(&(*b.1 as u32)));
                                             if let Some(idx) = next {
                                                 Some(*idx.0)
                                             } else {
                                                 None
                                             }
-                                        },
+                                        }
                                     };
                                     if t.is_some() {
                                         *s = TankState::Supply(fuel / capacity * 100.0);
                                     }
                                     info!("Supply to station {:?}", *t);
                                 }
-                            },
+                            }
                             TankState::Unload(_) | TankState::Refill(_) | TankState::Supply(_) => {
-                                let next = idle_stations.iter().max_by(|a, b| {
-                                    (*a.1 as u32).cmp(&(*b.1 as u32))
-                                });
+                                let next = idle_stations
+                                    .iter()
+                                    .max_by(|a, b| (*a.1 as u32).cmp(&(*b.1 as u32)));
                                 if let Some(idx) = next {
                                     *t = Some(*idx.0);
                                     if fuel == 0.0 {
@@ -145,10 +149,15 @@ impl Tank {
                                     *t = None;
                                     *s = TankState::Refill(fuel / capacity * 100.0);
                                 }
-                                trace!("Set next target to {:?} from {:?}, state={:?}", next, idle_stations, *s);
-                            },
+                                trace!(
+                                    "Set next target to {:?} from {:?}, state={:?}",
+                                    next,
+                                    idle_stations,
+                                    *s
+                                );
+                            }
                         }
-                    },
+                    }
                     Ok(Msg::IdleStation(idx)) => {
                         if !mq_s.contains_key(&idx) {
                             let q_name = format!("{}{}", STATION_QUEUE_PREFIX, idx);
@@ -160,11 +169,11 @@ impl Tank {
                             mq_m.send(Msg::Fuel(0.0)).expect("Send fuel request");
                         }
                         idle_stations.insert(idx, DEFAULT_SCORE);
-                    },
+                    }
                     Err(e) => {
                         error!("Vehicle queue receive error: {:?}", e);
-                        break
-                    },
+                        break;
+                    }
                 }
             }
         });
@@ -190,4 +199,3 @@ impl Tank {
         self.q.send(msg).expect("Send tank unload message");
     }
 }
-
