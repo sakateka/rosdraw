@@ -85,6 +85,12 @@ pub fn model(app: &App) -> Model {
     // Create the UI.
     let mut ui = app.new_ui().build().unwrap();
 
+    // Add font
+    let font_bytes = include_bytes!("../assets/fonts/NotoSans/NotoSans-Regular.ttf");
+    let font_collection = conrod::text::FontCollection::from_bytes(font_bytes.to_vec()).unwrap();
+    let font = font_collection.into_font().expect("Load fonts");
+    ui.fonts_mut().insert(font);
+
     let mut ids = Ids::new(ui.widget_id_generator());
     ids.stations
         .resize(NUM_STATIONS, &mut ui.widget_id_generator());
