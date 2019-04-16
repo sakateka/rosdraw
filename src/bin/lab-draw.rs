@@ -22,7 +22,8 @@ fn main() {
 pub fn model(app: &App) -> Model {
     info!("Create window");
     app.new_window()
-        .with_title("Power station")
+        .with_multisampling(0)
+        .with_title("Lab multithreading")
         .with_dimensions(600, 400)
         .build()
         .unwrap();

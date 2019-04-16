@@ -75,6 +75,7 @@ widget_ids! {
 
 pub fn model(app: &App) -> Model {
     app.new_window()
+        .with_multisampling(0)
         .with_title("Power station")
         .with_dimensions(600, 400)
         .build()
