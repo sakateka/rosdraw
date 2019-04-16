@@ -5,6 +5,8 @@ use env_logger;
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
 use nannou;
 use nannou::prelude::*;
+use nannou::ui::prelude::{widget, Colorable, Positionable, Ui, Widget};
+use procinfo::pid::stat_self;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -50,7 +52,7 @@ pub fn model(app: &App) -> Model {
 
     // Create the UI.
     info!("Create ui");
-    app.new_ui().build().unwrap();
+    let ui = app.new_ui().build().unwrap();
     let color = WHITE;
     let update_period = 1001.0; // trigger update
     let position = Arc::new(Mutex::new(10.0));
@@ -58,6 +60,7 @@ pub fn model(app: &App) -> Model {
     info!("Create model");
 
     Model {
+        ui,
         circles,
         color,
         update_period,
@@ -103,6 +106,17 @@ fn event(app: &App, mut m: Model, event: Event) -> Model {
                 }
                 Err(_) => (),
             }
+            let tr = rec.top_right();
+
+            let text = match stat_self() {
+                Ok(stat) => format!("{} threads", stat.num_threads).to_owned(),
+                Err(_) => "".to_string(),
+            };
+            widget::Text::new(text.as_ref())
+                .xy([tr.x as f64 - 40.0, tr.y as f64 - 20.0])
+                .font_size(15)
+                .color(conrod::color::ORANGE)
+                .set(m.ui.generate_widget_id(), &mut m.ui.set_widgets());
         }
         _ => (),
     }
@@ -123,10 +137,12 @@ fn view(app: &App, model: &Model, frame: Frame) -> Frame {
             .w_h(25.0, 25.0);
     }
     draw.to_frame(app, &frame).unwrap();
+    model.ui.draw_to_frame(app, &frame).unwrap();
     frame
 }
 
 pub struct Model {
+    pub ui: Ui,
     pub circles: Vec<Circle>,
     pub color: Rgba,
     pub update_period: f64,
