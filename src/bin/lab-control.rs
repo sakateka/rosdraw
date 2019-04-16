@@ -33,8 +33,12 @@ fn main() {
         .arg(server_name)
         .spawn()
         .expect("Failed to execute command");
-    if let Ok(exit) = child.try_wait() {
-        error!("Exit status from child {:?}", exit);
+    match child.try_wait() {
+        Ok(Some(exit)) => {
+            error!("Exit status from child {:?}", exit);
+            process::exit(1);
+        }
+        _ => (),
     }
 
     let (_, tx): (_, IpcSender<(usize, f32)>) = server.accept().unwrap();
