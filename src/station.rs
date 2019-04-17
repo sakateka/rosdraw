@@ -19,7 +19,7 @@ pub struct Station {
 impl Station {
     pub fn new(idx: usize, id: widget::Id, id_burning: widget::Id) -> Self {
         let fuel = Arc::new(Mutex::new(10.));
-        let speed_update = 0.3;
+        let speed_update = 0.2;
         let speed = Arc::new(Mutex::new(speed_update));
         Station {
             id,

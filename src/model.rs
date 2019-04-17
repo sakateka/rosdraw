@@ -113,7 +113,7 @@ pub fn model(app: &App) -> Model {
         ui,
         ids,
         mining: 2.0,
-        shipping: 2.0,
+        shipping: 3.0,
         stations,
         mine,
         vehicle,
